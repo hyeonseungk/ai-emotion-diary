@@ -1,7 +1,18 @@
 "use client";
 import { supabase } from "@/lib/supabaseClient";
-import { format } from "date-fns";
+import {
+  addMonths,
+  eachDayOfInterval,
+  endOfMonth,
+  format,
+  getDay,
+  isSameDay,
+  isToday,
+  startOfMonth,
+  subMonths,
+} from "date-fns";
 import { ko } from "date-fns/locale";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -17,6 +28,7 @@ export default function DiaryListPage() {
   const [diaries, setDiaries] = useState<Diary[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [currentMonth, setCurrentMonth] = useState(new Date());
   const router = useRouter();
 
   useEffect(() => {
@@ -48,136 +60,514 @@ export default function DiaryListPage() {
     }
   };
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/auth");
+  // 달력 관련 함수들
+  const getDiaryForDate = (date: Date) => {
+    return diaries.find((diary) => isSameDay(new Date(diary.created_at), date));
+  };
+
+  const getCalendarDays = () => {
+    const start = startOfMonth(currentMonth);
+    const end = endOfMonth(currentMonth);
+    const days = eachDayOfInterval({ start, end });
+
+    // 월의 시작 요일만큼 앞에 빈 칸 추가
+    const startDayOfWeek = getDay(start);
+    const emptyDays = Array.from({ length: startDayOfWeek }, () => null);
+
+    return [...emptyDays, ...days];
+  };
+
+  const goToPreviousMonth = () => {
+    setCurrentMonth((prev) => subMonths(prev, 1));
+  };
+
+  const goToNextMonth = () => {
+    setCurrentMonth((prev) => addMonths(prev, 1));
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-rose-50 to-teal-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-rose-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">일기를 불러오는 중...</p>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-rose-50 to-indigo-50">
+        <div className="animate-pulse">
+          <div className="w-8 h-8 bg-rose-300 rounded-full mx-auto mb-4"></div>
+          <div className="text-slate-600 font-light">Loading...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-rose-50 to-teal-50 py-8">
-      <div className="container mx-auto px-4 max-w-4xl">
-        {/* 헤더 */}
-        <header className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-rose-600 mb-2">
-            나의 감정일기
-          </h1>
-          <p className="text-gray-600 mb-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-rose-50 to-indigo-50">
+      {/* 네비게이션 */}
+      <nav className="sticky top-0 z-10 backdrop-blur-xl bg-white/70 border-b border-white/20">
+        <div className="max-w-7xl mx-auto px-6 sm:px-8 lg:px-12">
+          <div className="flex items-center justify-between h-20">
+            <Link href="/" className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-rose-400 to-pink-500 rounded-xl flex items-center justify-center shadow-lg">
+                <span className="text-white text-lg font-semibold">감</span>
+              </div>
+              <h1 className="text-2xl font-light text-slate-800 tracking-wide">
+                감정일기
+              </h1>
+            </Link>
+
+            <div className="flex items-center space-x-6">
+              <Link
+                href="/settings"
+                className="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-white/50 rounded-xl transition-all duration-200"
+              >
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+                설정
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* 메인 콘텐츠 */}
+      <main className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-12 py-16">
+        {/* 헤더 섹션 */}
+        <section className="text-center mb-16">
+          <h2 className="text-4xl sm:text-5xl font-light text-slate-800 mb-6 tracking-tight">
+            나의
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-pink-500 font-normal">
+              감정일기
+            </span>
+          </h2>
+          <p className="text-xl text-slate-600 font-light leading-relaxed mb-12">
             기록한 일기들을 돌아보며 성장을 확인해보세요
           </p>
 
-          {/* 뷰 모드 전환 */}
-          <div className="flex justify-center gap-2 mb-6">
-            <button
-              onClick={() => setViewMode("list")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                viewMode === "list"
-                  ? "bg-rose-400 text-white"
-                  : "bg-white/80 text-gray-600 hover:bg-white"
-              }`}
-            >
-              📝 리스트 보기
-            </button>
-            <button
-              onClick={() => setViewMode("calendar")}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                viewMode === "calendar"
-                  ? "bg-rose-400 text-white"
-                  : "bg-white/80 text-gray-600 hover:bg-white"
-              }`}
-            >
-              📅 달력 보기
-            </button>
-          </div>
-
-          {/* 새 일기 작성 버튼 */}
-          <button
-            onClick={() => router.push("/diary/new")}
-            className="bg-rose-400 hover:bg-rose-500 text-white font-semibold px-6 py-3 rounded-lg transition-colors shadow-lg"
-          >
-            ✍️ 새 일기 쓰기
-          </button>
-        </header>
-
-        {/* 일기 목록 */}
-        <main>
-          {diaries.length === 0 ? (
-            <div className="bg-white/80 rounded-xl shadow-lg p-12 text-center">
-              <div className="text-6xl mb-4">📖</div>
-              <h3 className="text-xl font-semibold text-gray-800 mb-2">
-                아직 기록된 일기가 없어요
-              </h3>
-              <p className="text-gray-600 mb-6">첫 번째 일기를 작성해보세요!</p>
+          {/* 컨트롤 바 */}
+          <div className="flex flex-col sm:flex-row items-center justify-between max-w-4xl mx-auto gap-6">
+            {/* 뷰 모드 전환 */}
+            <div className="flex bg-white/40 backdrop-blur-sm rounded-2xl p-2 border border-white/30">
               <button
-                onClick={() => router.push("/diary/new")}
-                className="bg-rose-400 hover:bg-rose-500 text-white font-semibold px-6 py-3 rounded-lg transition-colors"
+                onClick={() => setViewMode("list")}
+                className={`flex items-center px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  viewMode === "list"
+                    ? "bg-white text-slate-800 shadow-lg"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
               >
-                첫 일기 쓰기
+                <svg
+                  className="w-5 h-5 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M4 6h16M4 12h16M4 18h16"
+                  />
+                </svg>
+                리스트
+              </button>
+              <button
+                onClick={() => setViewMode("calendar")}
+                className={`flex items-center px-6 py-3 rounded-xl font-medium transition-all duration-200 ${
+                  viewMode === "calendar"
+                    ? "bg-white text-slate-800 shadow-lg"
+                    : "text-slate-600 hover:text-slate-800"
+                }`}
+              >
+                <svg
+                  className="w-5 h-5 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+                달력
               </button>
             </div>
+
+            {/* 새 일기 작성 버튼 */}
+            <Link
+              href="/diary/new"
+              className="group inline-flex items-center px-8 py-4 bg-gradient-to-r from-rose-400 to-pink-500 text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+            >
+              <svg
+                className="w-5 h-5 mr-2 group-hover:scale-110 transition-transform duration-200"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                />
+              </svg>
+              새 일기 쓰기
+            </Link>
+          </div>
+        </section>
+
+        {/* 일기 콘텐츠 */}
+        <section>
+          {diaries.length === 0 ? (
+            <div className="max-w-2xl mx-auto">
+              <div className="bg-white/40 backdrop-blur-sm rounded-3xl p-12 text-center border border-white/30 shadow-lg">
+                <div className="w-24 h-24 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-8">
+                  <svg
+                    className="w-12 h-12 text-slate-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-semibold text-slate-800 mb-4">
+                  아직 기록된 일기가 없어요
+                </h3>
+                <p className="text-lg text-slate-600 font-light mb-8">
+                  첫 번째 일기를 작성하고 AI 분석을 받아보세요!
+                </p>
+                <Link
+                  href="/diary/new"
+                  className="inline-flex items-center px-8 py-4 bg-gradient-to-r from-rose-400 to-pink-500 text-white font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                >
+                  첫 일기 쓰기 ✨
+                </Link>
+              </div>
+            </div>
           ) : viewMode === "list" ? (
-            <div className="space-y-4">
+            <div className="grid gap-6 max-w-4xl mx-auto">
               {diaries.map((diary) => (
                 <div
                   key={diary.id}
-                  className="bg-white/80 rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow cursor-pointer"
+                  className="group bg-white/40 backdrop-blur-sm rounded-3xl p-8 border border-white/30 shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 cursor-pointer"
                   onClick={() => router.push(`/diary/${diary.id}`)}
                 >
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="text-sm text-gray-500">
-                      {format(
-                        new Date(diary.created_at),
-                        "yyyy년 M월 d일 EEEE",
-                        { locale: ko }
-                      )}
-                    </span>
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-rose-100 to-pink-100 rounded-2xl flex items-center justify-center">
+                        <svg
+                          className="w-6 h-6 text-rose-500"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                          />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-slate-800 font-semibold">
+                          {format(new Date(diary.created_at), "M월 d일 EEEE", {
+                            locale: ko,
+                          })}
+                        </p>
+                        <p className="text-sm text-slate-500 font-light">
+                          {format(new Date(diary.created_at), "yyyy년 HH:mm", {
+                            locale: ko,
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <svg
+                      className="w-5 h-5 text-slate-400 group-hover:text-slate-600 transition-colors duration-200"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
                   </div>
 
-                  <div className="mb-4">
-                    <p className="text-gray-800 line-clamp-3">
+                  <div className="mb-6">
+                    <p className="text-slate-700 leading-relaxed line-clamp-3 text-lg font-light">
                       {diary.content}
                     </p>
                   </div>
 
                   {diary.ai_feedback && (
-                    <div className="bg-rose-50 rounded-lg p-4 border-l-4 border-rose-400">
-                      <p className="text-sm text-gray-700">
-                        💭 {diary.ai_feedback}
-                      </p>
+                    <div className="bg-gradient-to-r from-rose-50/80 to-pink-50/80 rounded-2xl p-6 border border-rose-100/50">
+                      <div className="flex items-start space-x-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-rose-400 to-pink-500 rounded-lg flex items-center justify-center flex-shrink-0 mt-1">
+                          <svg
+                            className="w-4 h-4 text-white"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                            />
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-sm text-slate-500 font-medium mb-1">
+                            AI 감정 분석
+                          </p>
+                          <p className="text-slate-700 font-light leading-relaxed">
+                            {diary.ai_feedback}
+                          </p>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
               ))}
             </div>
           ) : (
-            <div className="bg-white/80 rounded-xl shadow-lg p-6">
-              <p className="text-center text-gray-600">
-                달력 뷰는 추후 업데이트 예정입니다 📅
-              </p>
+            /* 달력 뷰 */
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-white/40 backdrop-blur-sm rounded-3xl border border-white/30 shadow-lg overflow-hidden">
+                {/* 달력 헤더 */}
+                <div className="bg-gradient-to-r from-rose-400 to-pink-500 p-6">
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={goToPreviousMonth}
+                      className="p-2 text-white hover:bg-white/20 rounded-xl transition-colors duration-200"
+                    >
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M15 19l-7-7 7-7"
+                        />
+                      </svg>
+                    </button>
+
+                    <h3 className="text-2xl font-semibold text-white">
+                      {format(currentMonth, "yyyy년 M월", { locale: ko })}
+                    </h3>
+
+                    <button
+                      onClick={goToNextMonth}
+                      className="p-2 text-white hover:bg-white/20 rounded-xl transition-colors duration-200"
+                    >
+                      <svg
+                        className="w-6 h-6"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M9 5l7 7-7 7"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 요일 헤더 */}
+                <div className="grid grid-cols-7 bg-slate-50/50">
+                  {["일", "월", "화", "수", "목", "금", "토"].map(
+                    (day, index) => (
+                      <div
+                        key={day}
+                        className={`p-4 text-center font-medium ${
+                          index === 0
+                            ? "text-red-500"
+                            : index === 6
+                            ? "text-blue-500"
+                            : "text-slate-600"
+                        }`}
+                      >
+                        {day}
+                      </div>
+                    )
+                  )}
+                </div>
+
+                {/* 달력 날짜 */}
+                <div className="grid grid-cols-7">
+                  {getCalendarDays().map((day, index) => {
+                    if (!day) {
+                      return (
+                        <div key={index} className="aspect-square p-2"></div>
+                      );
+                    }
+
+                    const diary = getDiaryForDate(day);
+                    const isCurrentToday = isToday(day);
+
+                    return (
+                      <div
+                        key={day.toString()}
+                        className={`aspect-square p-2 border-r border-b border-white/20 relative group cursor-pointer hover:bg-rose-50/50 transition-colors duration-200 ${
+                          isCurrentToday ? "bg-rose-100/50" : ""
+                        }`}
+                        onClick={() => {
+                          if (diary) {
+                            router.push(`/diary/${diary.id}`);
+                          } else {
+                            router.push("/diary/new");
+                          }
+                        }}
+                      >
+                        <div className="h-full flex flex-col">
+                          <div
+                            className={`text-sm font-medium mb-1 ${
+                              isCurrentToday
+                                ? "text-rose-600 font-bold"
+                                : "text-slate-600"
+                            }`}
+                          >
+                            {format(day, "d")}
+                          </div>
+
+                          {diary && (
+                            <div className="flex-1 min-h-0">
+                              <div className="w-full h-2 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full mb-2"></div>
+                              <p className="text-xs text-slate-600 line-clamp-2 leading-tight">
+                                {diary.content}
+                              </p>
+                              {diary.ai_feedback && (
+                                <div className="mt-1">
+                                  <div className="w-4 h-4 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center">
+                                    <svg
+                                      className="w-2 h-2 text-white"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={3}
+                                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                                      />
+                                    </svg>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {!diary && (
+                            <div className="flex-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                              <svg
+                                className="w-4 h-4 text-slate-400"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={1.5}
+                                  d="M12 4v16m8-8H4"
+                                />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* 달력 하단 설명 */}
+                <div className="p-6 bg-slate-50/30">
+                  <div className="flex items-center justify-center space-x-8 text-sm text-slate-600">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-2 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full"></div>
+                      <span>일기 작성됨</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center">
+                        <svg
+                          className="w-2 h-2 text-white"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                          />
+                        </svg>
+                      </div>
+                      <span>AI 분석 완료</span>
+                    </div>
+                    <div className="text-slate-500">
+                      날짜를 클릭하여 일기를 보거나 작성하세요
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
-        </main>
+        </section>
+      </main>
 
-        {/* 로그아웃 버튼 */}
-        <div className="text-center mt-8">
-          <button
-            onClick={handleLogout}
-            className="text-gray-500 hover:text-gray-700 text-sm underline"
-          >
-            로그아웃
-          </button>
+      {/* 푸터 */}
+      <footer className="border-t border-white/20 mt-20">
+        <div className="max-w-6xl mx-auto px-6 sm:px-8 lg:px-12 py-8">
+          <div className="flex items-center justify-center">
+            <button
+              onClick={async () => {
+                if (confirm("정말 로그아웃하시겠습니까?")) {
+                  await supabase.auth.signOut();
+                }
+              }}
+              className="text-slate-400 hover:text-slate-600 text-sm font-light transition-colors duration-200"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

@@ -161,7 +161,7 @@ export default function EditDiaryPage() {
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="오늘 하루는 어땠나요? 기쁜 일, 슬픈 일, 복잡한 마음... 무엇이든 자유롭게 적어보세요."
-                className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-200 focus:border-transparent resize-none"
+                className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-200 focus:border-transparent resize-none text-gray-900 placeholder-gray-500"
                 required
               />
             </div>

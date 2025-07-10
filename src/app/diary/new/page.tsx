@@ -20,42 +20,48 @@ export default function NewDiaryPage() {
     setMessage(null);
 
     try {
-      // 1. 일기 저장
-      const { data: diary, error: diaryError } = await supabase
-        .from("diaries")
-        .insert([
-          {
-            content: content.trim(),
-            user_id: (await supabase.auth.getUser()).data.user?.id,
+      // 현재 사용자 세션 확인
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        throw new Error("로그인이 필요합니다.");
+      }
+
+      console.log("accessToken!!!: ", session.access_token);
+      // Edge Function 호출
+      const { data, error } = await supabase.functions.invoke(
+        "clever-endpoint",
+        {
+          body: { content: content.trim() },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
           },
-        ])
-        .select()
-        .single();
+        }
+      );
 
-      if (diaryError) throw diaryError;
+      if (error) {
+        console.error("Edge Function 오류:", error);
+        throw new Error(error.message || "일기 저장 중 오류가 발생했습니다.");
+      }
 
-      // 2. AI 감정 분석 요청 (실제로는 OpenAI API 호출)
-      const aiFeedback = await analyzeEmotion();
+      if (!data.success) {
+        throw new Error(data.error || "일기 저장에 실패했습니다.");
+      }
 
-      // 3. AI 피드백 업데이트
-      const { error: updateError } = await supabase
-        .from("diaries")
-        .update({ ai_feedback: aiFeedback })
-        .eq("id", diary.id);
+      setMessage(data.message || "일기가 성공적으로 저장되었습니다!");
 
-      if (updateError) throw updateError;
-
-      setMessage("일기가 성공적으로 저장되었습니다!");
+      // 성공 시 일기 목록으로 이동
       setTimeout(() => {
         router.push("/diary");
       }, 1500);
     } catch (error: unknown) {
       console.error("Error saving diary:", error);
+
       if (error && typeof error === "object" && "message" in error) {
-        setMessage(
-          (error as { message: string }).message ||
-            "일기 저장 중 오류가 발생했습니다."
-        );
+        setMessage((error as { message: string }).message);
       } else {
         setMessage("일기 저장 중 오류가 발생했습니다.");
       }
@@ -64,40 +70,24 @@ export default function NewDiaryPage() {
     }
   };
 
-  // 임시 AI 감정 분석 함수 (나중에 OpenAI API로 교체)
-  const analyzeEmotion = async (): Promise<string> => {
-    // 실제로는 OpenAI API를 호출해야 함
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // 1초 대기
-
-    const emotions = [
-      "오늘 하루 정말 수고하셨어요. 당신의 감정을 이해하고 있어요.",
-      "기분이 좋으신 것 같아요! 이런 순간들을 더 많이 가져보세요.",
-      "조금 지치신 것 같아요. 잠깐의 휴식을 취해보는 건 어떨까요?",
-      "복잡한 마음이신 것 같아요. 천천히 정리해보세요.",
-      "평온한 하루를 보내고 계시는군요. 이런 평화로운 순간이 소중해요.",
-    ];
-
-    return emotions[Math.floor(Math.random() * emotions.length)];
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-rose-50 to-teal-50 py-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-rose-50 to-indigo-50 py-8">
       <div className="container mx-auto px-4 max-w-2xl">
         {/* 헤더 */}
         <header className="text-center mb-8">
           <h1 className="text-3xl font-bold text-rose-600 mb-2">오늘의 일기</h1>
-          <p className="text-gray-600">
+          <p className="text-slate-600">
             마음껏 표현해보세요. AI가 당신의 감정을 이해해드릴게요 ✨
           </p>
         </header>
 
         {/* 일기 작성 폼 */}
-        <div className="bg-white/80 rounded-xl shadow-lg p-8">
+        <div className="bg-white/40 backdrop-blur-sm rounded-3xl shadow-lg p-8 border border-white/30">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label
                 htmlFor="content"
-                className="block text-sm font-medium text-gray-700 mb-2"
+                className="block text-sm font-medium text-slate-700 mb-2"
               >
                 오늘의 마음
               </label>
@@ -106,7 +96,7 @@ export default function NewDiaryPage() {
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="오늘 하루는 어땠나요? 기쁜 일, 슬픈 일, 복잡한 마음... 무엇이든 자유롭게 적어보세요."
-                className="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-rose-200 focus:border-transparent resize-none"
+                className="w-full h-64 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-200 focus:border-transparent resize-none text-gray-900 placeholder-gray-500 bg-white/80"
                 required
               />
             </div>
@@ -115,8 +105,8 @@ export default function NewDiaryPage() {
               <div
                 className={`p-4 rounded-lg text-sm ${
                   message.includes("성공")
-                    ? "bg-green-100 text-green-700"
-                    : "bg-red-100 text-red-700"
+                    ? "bg-green-100 text-green-700 border border-green-200"
+                    : "bg-red-100 text-red-700 border border-red-200"
                 }`}
               >
                 {message}
@@ -127,26 +117,55 @@ export default function NewDiaryPage() {
               <button
                 type="button"
                 onClick={() => router.back()}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 font-semibold py-3 px-6 rounded-lg transition-colors"
+                className="flex-1 bg-slate-300 hover:bg-slate-400 text-slate-700 font-semibold py-3 px-6 rounded-lg transition-colors"
               >
                 취소
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-rose-400 hover:bg-rose-500 text-white font-semibold py-3 px-6 rounded-lg transition-colors disabled:opacity-60"
+                className="flex-1 bg-gradient-to-r from-rose-400 to-pink-500 hover:from-rose-500 hover:to-pink-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {loading ? "저장 중..." : "일기 저장하기"}
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <svg
+                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      ></circle>
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      ></path>
+                    </svg>
+                    AI 분석 중...
+                  </div>
+                ) : (
+                  "일기 저장하기"
+                )}
               </button>
             </div>
           </form>
         </div>
 
         {/* 도움말 */}
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>
-            💡 일기를 저장하면 AI가 당신의 감정을 분석해 따뜻한 피드백을 드려요
-          </p>
+        <div className="mt-6 text-center">
+          <div className="bg-white/30 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+            <p className="text-sm text-slate-600">
+              💡 일기를 저장하면 ChatGPT AI가 당신의 감정을 분석해 따뜻한
+              피드백을 드려요
+            </p>
+          </div>
         </div>
       </div>
     </div>
