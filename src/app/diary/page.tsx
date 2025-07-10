@@ -61,8 +61,10 @@ export default function DiaryListPage() {
   };
 
   // 달력 관련 함수들
-  const getDiaryForDate = (date: Date) => {
-    return diaries.find((diary) => isSameDay(new Date(diary.created_at), date));
+  const getDiariesForDate = (date: Date) => {
+    return diaries.filter((diary) =>
+      isSameDay(new Date(diary.created_at), date)
+    );
   };
 
   const getCalendarDays = () => {
@@ -436,7 +438,7 @@ export default function DiaryListPage() {
                       );
                     }
 
-                    const diary = getDiaryForDate(day);
+                    const dayDiaries = getDiariesForDate(day);
                     const isCurrentToday = isToday(day);
 
                     return (
@@ -446,10 +448,16 @@ export default function DiaryListPage() {
                           isCurrentToday ? "bg-rose-100/50" : ""
                         }`}
                         onClick={() => {
-                          if (diary) {
-                            router.push(`/diary/${diary.id}`);
+                          if (dayDiaries.length === 1) {
+                            router.push(`/diary/${dayDiaries[0].id}`);
+                          } else if (dayDiaries.length > 1) {
+                            // 여러 일기가 있는 경우, 해당 날짜로 필터된 리스트 뷰로 이동
+                            setViewMode("list");
+                            // 또는 별도의 날짜별 상세 페이지로 이동할 수도 있습니다
                           } else {
-                            router.push("/diary/new");
+                            // 선택한 날짜를 URL 파라미터로 전달
+                            const dateParam = format(day, "yyyy-MM-dd");
+                            router.push(`/diary/new?date=${dateParam}`);
                           }
                         }}
                       >
@@ -464,13 +472,34 @@ export default function DiaryListPage() {
                             {format(day, "d")}
                           </div>
 
-                          {diary && (
+                          {dayDiaries.length > 0 && (
                             <div className="flex-1 min-h-0">
-                              <div className="w-full h-2 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full mb-2"></div>
+                              {/* 일기 개수 표시 */}
+                              <div className="flex items-center mb-1">
+                                <div className="w-full h-2 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full"></div>
+                                {dayDiaries.length > 1 && (
+                                  <span className="ml-1 text-xs bg-rose-500 text-white rounded-full w-4 h-4 flex items-center justify-center font-bold">
+                                    {dayDiaries.length}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* 첫 번째 일기 내용 미리보기 */}
                               <p className="text-xs text-slate-600 line-clamp-2 leading-tight">
-                                {diary.content}
+                                {dayDiaries[0].content}
                               </p>
-                              {diary.ai_feedback && (
+
+                              {/* 여러 일기가 있는 경우 추가 표시 */}
+                              {dayDiaries.length > 1 && (
+                                <p className="text-xs text-slate-500 mt-1">
+                                  +{dayDiaries.length - 1}개 더
+                                </p>
+                              )}
+
+                              {/* AI 분석 완료 표시 */}
+                              {dayDiaries.some(
+                                (diary) => diary.ai_feedback
+                              ) && (
                                 <div className="mt-1">
                                   <div className="w-4 h-4 bg-gradient-to-br from-rose-400 to-pink-500 rounded-full flex items-center justify-center">
                                     <svg
@@ -492,7 +521,7 @@ export default function DiaryListPage() {
                             </div>
                           )}
 
-                          {!diary && (
+                          {dayDiaries.length === 0 && (
                             <div className="flex-1 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                               <svg
                                 className="w-4 h-4 text-slate-400"

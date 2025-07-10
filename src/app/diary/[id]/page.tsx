@@ -92,40 +92,55 @@ export default function DiaryDetailPage() {
     setMessage(null);
 
     try {
-      // 새로운 AI 분석 요청
-      const newFeedback = await analyzeEmotion();
+      // 현재 사용자 세션 확인
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-      const { error } = await supabase
-        .from("diaries")
-        .update({ ai_feedback: newFeedback })
-        .eq("id", diaryId);
+      if (sessionError || !session) {
+        throw new Error("로그인이 필요합니다.");
+      }
 
-      if (error) throw error;
+      // Edge Function 호출 (재분석)
+      const { data, error } = await supabase.functions.invoke(
+        "clever-endpoint",
+        {
+          body: {
+            content: diary.content,
+            diaryId: diary.id,
+            isReanalyze: true,
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      if (error) {
+        console.error("Edge Function 오류:", error);
+        throw new Error(error.message || "감정 분석 중 오류가 발생했습니다.");
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || "감정 분석에 실패했습니다.");
+      }
 
       // 로컬 상태 업데이트
-      setDiary((prev) => (prev ? { ...prev, ai_feedback: newFeedback } : null));
-      setMessage("감정 분석이 완료되었습니다!");
-    } catch (error) {
+      setDiary((prev) =>
+        prev ? { ...prev, ai_feedback: data.diary.ai_feedback } : null
+      );
+      setMessage(data.message || "감정 분석이 완료되었습니다!");
+    } catch (error: unknown) {
       console.error("Error reanalyzing:", error);
-      setMessage("감정 분석 중 오류가 발생했습니다.");
+      if (error && typeof error === "object" && "message" in error) {
+        setMessage((error as { message: string }).message);
+      } else {
+        setMessage("감정 분석 중 오류가 발생했습니다.");
+      }
     } finally {
       setAnalyzing(false);
     }
-  };
-
-  // 임시 AI 감정 분석 함수 (나중에 OpenAI API로 교체)
-  const analyzeEmotion = async (): Promise<string> => {
-    await new Promise((resolve) => setTimeout(resolve, 2000)); // 2초 대기
-
-    const emotions = [
-      "다시 읽어보니 더 깊은 감정이 느껴져요. 당신의 마음을 이해하고 있어요.",
-      "시간이 지나면서 새로운 관점으로 바라볼 수 있게 되었네요.",
-      "이런 순간들이 당신을 더 성숙하게 만들어가고 있어요.",
-      "감정의 흐름을 잘 표현하고 계시네요. 정말 대단해요.",
-      "작은 변화들이 모여 큰 성장을 만들어가고 있어요.",
-    ];
-
-    return emotions[Math.floor(Math.random() * emotions.length)];
   };
 
   if (loading) {

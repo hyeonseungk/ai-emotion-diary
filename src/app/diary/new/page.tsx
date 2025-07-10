@@ -53,10 +53,16 @@ export default function NewDiaryPage() {
 
       setMessage(data.message || "일기가 성공적으로 저장되었습니다!");
 
-      // 성공 시 일기 목록으로 이동
+      // 성공 시 새로 작성된 일기의 상세 페이지로 이동
       setTimeout(() => {
-        router.push("/diary");
-      }, 1500);
+        if (data.diary && data.diary.id) {
+          console.log("response after diary insert: ", data);
+          router.push(`/diary/${data.diary.id}`);
+        } else {
+          // 만약 diary ID가 없다면 일기 목록으로 이동
+          router.push("/diary");
+        }
+      }, 100);
     } catch (error: unknown) {
       console.error("Error saving diary:", error);
 
