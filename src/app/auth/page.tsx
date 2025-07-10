@@ -1,13 +1,34 @@
 "use client";
 import { supabase } from "@/lib/supabaseClient";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 export default function AuthPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
+  const router = useRouter();
+
+  // 이미 로그인된 사용자는 홈으로 리다이렉트
+  useEffect(() => {
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setCheckingSession(false);
+
+      if (session) {
+        router.push("/");
+      }
+    };
+
+    // 약간의 지연을 두어 무한 루프 방지
+    const timer = setTimeout(checkSession, 100);
+    return () => clearTimeout(timer);
+  }, [router]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +51,10 @@ export default function AuthPage() {
         });
         if (error) throw error;
         setMessage("로그인 성공!");
-        window.location.href = "/";
+        // 약간의 지연 후 홈으로 리다이렉트
+        setTimeout(() => {
+          router.push("/");
+        }, 500);
       }
     } catch (err: unknown) {
       if (err && typeof err === "object" && "message" in err) {
@@ -44,6 +68,14 @@ export default function AuthPage() {
       setLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-rose-100 to-teal-100">
+        <div className="text-rose-500 text-lg">세션 확인 중...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-rose-100 to-teal-100 px-4">
@@ -62,7 +94,7 @@ export default function AuthPage() {
             placeholder="이메일"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-rose-200"
+            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-rose-200 text-gray-900 placeholder-gray-500"
             autoComplete="email"
             required
           />
@@ -71,7 +103,7 @@ export default function AuthPage() {
             placeholder="비밀번호"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-rose-200"
+            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-rose-200 text-gray-900 placeholder-gray-500"
             autoComplete={isSignUp ? "new-password" : "current-password"}
             required
           />
@@ -84,7 +116,7 @@ export default function AuthPage() {
           </button>
         </form>
         {message && (
-          <div className="text-center text-sm text-rose-600 mt-2 min-h-[24px]">
+          <div className="text-center text-sm text-rose-600 mt-2">
             {message}
           </div>
         )}

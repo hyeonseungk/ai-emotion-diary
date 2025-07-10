@@ -1,30 +1,72 @@
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+"use client";
+import { supabase } from "@/lib/supabaseClient";
+import type { Session } from "@supabase/supabase-js";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
-export default async function Home() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
-    { cookies: cookieStore }
-  );
+export default function Home() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  useEffect(() => {
+    const checkSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setSession(session);
+      setLoading(false);
 
-  if (!user) {
-    redirect("/auth");
+      if (!session) {
+        router.push("/auth");
+      }
+    };
+
+    checkSession();
+
+    // 세션 변화 감지
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      if (!session && event === "SIGNED_OUT") {
+        router.push("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-rose-50 to-teal-50">
+        <div className="text-rose-500 text-lg">로딩 중...</div>
+      </div>
+    );
   }
+
+  if (!session) {
+    return null; // 리다이렉트 중
+  }
+
+  const user = session.user;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-rose-50 to-teal-50">
       <div className="container mx-auto px-4 py-8">
         {/* 헤더 */}
         <header className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-rose-600 mb-4">감정일기</h1>
+          <div className="flex items-center justify-between max-w-4xl mx-auto mb-4">
+            <div className="w-16"></div> {/* 공간 균형을 위한 빈 div */}
+            <h1 className="text-4xl font-bold text-rose-600">감정일기</h1>
+            <Link
+              href="/settings"
+              className="text-rose-500 hover:text-rose-600 transition-colors text-sm"
+            >
+              ⚙️ 설정
+            </Link>
+          </div>
           <p className="text-lg text-gray-600">
             {user.email}님, 오늘도 따뜻한 하루 되세요 🌸
           </p>
@@ -82,14 +124,14 @@ export default async function Home() {
 
         {/* 로그아웃 버튼 */}
         <div className="text-center mt-8">
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="text-gray-500 hover:text-gray-700 text-sm underline"
-            >
-              로그아웃
-            </button>
-          </form>
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+            }}
+            className="text-gray-500 hover:text-gray-700 text-sm underline"
+          >
+            로그아웃
+          </button>
         </div>
       </div>
     </div>
