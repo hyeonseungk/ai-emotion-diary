@@ -12,6 +12,7 @@ interface Diary {
   created_at: string;
   updated_at: string;
   user_id: string;
+  target_date: string;
 }
 
 export default function DiaryDetailPage() {

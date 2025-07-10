@@ -1,6 +1,7 @@
 "use client";
 import { supabase } from "@/lib/supabaseClient";
 import type { Session } from "@supabase/supabase-js";
+import { endOfWeek, startOfWeek } from "date-fns";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,6 +9,8 @@ import { useEffect, useState } from "react";
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [weeklyInsight, setWeeklyInsight] = useState<string | null>(null);
+  const [insightLoading, setInsightLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -20,6 +23,9 @@ export default function Home() {
 
       if (!session) {
         router.push("/auth");
+      } else {
+        // 세션이 있으면 주간 인사이트 가져오기
+        fetchWeeklyInsight();
       }
     };
 
@@ -32,11 +38,52 @@ export default function Home() {
       setSession(session);
       if (!session && event === "SIGNED_OUT") {
         router.push("/auth");
+      } else if (session) {
+        fetchWeeklyInsight();
       }
     });
 
     return () => subscription.unsubscribe();
   }, [router]);
+
+  const fetchWeeklyInsight = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      // 이번 주의 시작과 끝 날짜 계산
+      const now = new Date();
+      const weekStart = startOfWeek(now, { weekStartsOn: 0 }); // 일요일부터 시작
+      const weekEnd = endOfWeek(now, { weekStartsOn: 0 });
+
+      const { data, error } = await supabase
+        .from("diaries")
+        .select("*")
+        .eq("user_id", user.id)
+        .gte("target_date", weekStart.toISOString().split("T")[0])
+        .lte("target_date", weekEnd.toISOString().split("T")[0])
+        .not("ai_feedback", "is", null)
+        .not("ai_feedback", "eq", "")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setWeeklyInsight(data[0].ai_feedback);
+      } else {
+        setWeeklyInsight(null);
+      }
+    } catch (error) {
+      console.error("Error fetching weekly insight:", error);
+      setWeeklyInsight(null);
+    } finally {
+      setInsightLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -206,27 +253,65 @@ export default function Home() {
                 <div className="w-20 h-1 bg-gradient-to-r from-rose-400 to-pink-500 rounded-full mx-auto"></div>
               </div>
 
-              <div className="text-center py-12">
-                <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <svg
-                    className="w-10 h-10 text-slate-400"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                    />
-                  </svg>
+              {insightLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-pulse">
+                    <div className="w-20 h-20 bg-slate-200 rounded-full mx-auto mb-6"></div>
+                    <div className="h-4 bg-slate-200 rounded mx-auto max-w-xs mb-2"></div>
+                    <div className="h-4 bg-slate-200 rounded mx-auto max-w-sm"></div>
+                  </div>
                 </div>
-                <p className="text-lg text-slate-600 font-light">
-                  아직 기록된 일기가 없어요.
-                  <br />첫 번째 일기를 작성하고 AI 분석을 받아보세요! ✨
-                </p>
-              </div>
+              ) : weeklyInsight ? (
+                <div className="bg-gradient-to-r from-rose-50/80 to-pink-50/80 rounded-2xl p-8 border border-rose-100/50">
+                  <div className="flex items-start space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-rose-400 to-pink-500 rounded-xl flex items-center justify-center flex-shrink-0 mt-1">
+                      <svg
+                        className="w-6 h-6 text-white"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm text-slate-500 font-medium mb-2">
+                        💭 AI의 최근 감정 분석
+                      </p>
+                      <p className="text-slate-700 font-light leading-relaxed text-lg">
+                        {weeklyInsight}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <svg
+                      className="w-10 h-10 text-slate-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.5}
+                        d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                      />
+                    </svg>
+                  </div>
+                  <p className="text-lg text-slate-600 font-light">
+                    이번 주에 작성된 일기가 없어요.
+                    <br />첫 번째 일기를 작성하고 AI 분석을 받아보세요! ✨
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </section>

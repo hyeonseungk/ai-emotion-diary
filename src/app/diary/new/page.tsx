@@ -1,16 +1,61 @@
 "use client";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { format, isAfter, startOfDay } from "date-fns";
+import { ko } from "date-fns/locale";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
-export default function NewDiaryPage() {
+function NewDiaryContent() {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [showFutureModal, setShowFutureModal] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const dateParam = searchParams.get("date");
+    if (dateParam) {
+      setSelectedDate(dateParam);
+      // 미래 날짜인지 체크
+      if (isFutureDate(dateParam)) {
+        setShowFutureModal(true);
+      }
+    }
+  }, [searchParams]);
+
+  const isFutureDate = (dateString: string) => {
+    try {
+      const selectedDate = new Date(dateString);
+      const today = startOfDay(new Date());
+      return isAfter(selectedDate, today);
+    } catch {
+      return false;
+    }
+  };
+
+  const getDisplayDate = () => {
+    if (selectedDate) {
+      try {
+        const date = new Date(selectedDate);
+        return format(date, "yyyy년 M월 d일 EEEE", { locale: ko });
+      } catch {
+        return "오늘";
+      }
+    }
+    return "오늘";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 미래 날짜 체크
+    if (selectedDate && isFutureDate(selectedDate)) {
+      setShowFutureModal(true);
+      return;
+    }
+
     if (!content.trim()) {
       setMessage("일기 내용을 입력해 주세요.");
       return;
@@ -35,7 +80,10 @@ export default function NewDiaryPage() {
       const { data, error } = await supabase.functions.invoke(
         "clever-endpoint",
         {
-          body: { content: content.trim() },
+          body: {
+            content: content.trim(),
+            selectedDate: selectedDate, // 선택된 날짜 전달
+          },
           headers: {
             Authorization: `Bearer ${session.access_token}`,
           },
@@ -76,15 +124,27 @@ export default function NewDiaryPage() {
     }
   };
 
+  const handleFutureModalClose = () => {
+    setShowFutureModal(false);
+    router.push("/diary"); // 달력으로 돌아가기
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-rose-50 to-indigo-50 py-8">
       <div className="container mx-auto px-4 max-w-2xl">
         {/* 헤더 */}
         <header className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-rose-600 mb-2">오늘의 일기</h1>
+          <h1 className="text-3xl font-bold text-rose-600 mb-2">
+            {selectedDate ? getDisplayDate() : "오늘"}의 일기
+          </h1>
           <p className="text-slate-600">
             마음껏 표현해보세요. AI가 당신의 감정을 이해해드릴게요 ✨
           </p>
+          {selectedDate && !isFutureDate(selectedDate) && (
+            <div className="mt-2 text-sm text-slate-500">
+              💡 선택하신 날짜로 일기가 저장됩니다
+            </div>
+          )}
         </header>
 
         {/* 일기 작성 폼 */}
@@ -95,15 +155,18 @@ export default function NewDiaryPage() {
                 htmlFor="content"
                 className="block text-sm font-medium text-slate-700 mb-2"
               >
-                오늘의 마음
+                {selectedDate ? getDisplayDate() : "오늘"}의 마음
               </label>
               <textarea
                 id="content"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                placeholder="오늘 하루는 어땠나요? 기쁜 일, 슬픈 일, 복잡한 마음... 무엇이든 자유롭게 적어보세요."
+                placeholder={`${
+                  selectedDate ? getDisplayDate() : "오늘"
+                } 하루는 어땠나요? 기쁜 일, 슬픈 일, 복잡한 마음... 무엇이든 자유롭게 적어보세요.`}
                 className="w-full h-64 p-4 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-200 focus:border-transparent resize-none text-gray-900 placeholder-gray-500 bg-white/80"
                 required
+                disabled={selectedDate ? isFutureDate(selectedDate) : false}
               />
             </div>
 
@@ -129,7 +192,9 @@ export default function NewDiaryPage() {
               </button>
               <button
                 type="submit"
-                disabled={loading}
+                disabled={
+                  loading || (selectedDate ? isFutureDate(selectedDate) : false)
+                }
                 className="flex-1 bg-gradient-to-r from-rose-400 to-pink-500 hover:from-rose-500 hover:to-pink-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -173,7 +238,63 @@ export default function NewDiaryPage() {
             </p>
           </div>
         </div>
+
+        {/* 미래 날짜 에러 모달 */}
+        {showFutureModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white/90 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full border border-white/30 shadow-2xl">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-gradient-to-br from-amber-100 to-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <svg
+                    className="w-8 h-8 text-amber-500"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-semibold text-slate-800 mb-4">
+                  아직 쓸 수 없어요
+                </h3>
+                <p className="text-lg text-slate-600 font-light mb-8 leading-relaxed">
+                  오늘보다 이후인 날짜에 대한
+                  <br />
+                  일기는 아직 쓸 수 없어요
+                </p>
+                <button
+                  onClick={handleFutureModalClose}
+                  className="w-full bg-gradient-to-r from-rose-400 to-pink-500 text-white font-semibold py-4 px-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1"
+                >
+                  달력으로 돌아가기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+export default function NewDiaryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-rose-50 to-indigo-50">
+          <div className="animate-pulse">
+            <div className="w-8 h-8 bg-rose-300 rounded-full mx-auto mb-4"></div>
+            <div className="text-slate-600 font-light">Loading...</div>
+          </div>
+        </div>
+      }
+    >
+      <NewDiaryContent />
+    </Suspense>
   );
 }
